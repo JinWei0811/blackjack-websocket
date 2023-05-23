@@ -1,15 +1,14 @@
 package com.example.websocket;
 
-import com.example.websocket.model.GameRoomModel;
-import com.example.websocket.model.GameRoomResponseModel;
-import com.example.websocket.model.JoinGameModel;
-import com.example.websocket.model.PlayerInfoModel;
+import com.example.websocket.model.*;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
 import org.springframework.web.socket.*;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 
@@ -23,102 +22,66 @@ public class RoomManagerHandler implements WebSocketHandler {
     private static Logger logger = LoggerFactory.getLogger(RoomManagerHandler.class);
     private static final String ALLOWED_CHARACTERS = "abcdefghijkmnpqrstuvwxyzABCDEFGHIJKLMNPQRSTUVWXYZ123456789";
     private static final int ROOM_ID_LENGTH = 6;
+    @Autowired
+    private SimpMessagingTemplate messagingTemplate;
     HashSet<String> roomIds = new HashSet<>();
-    HashSet<PlayerInfoModel> playerInfoSet = new HashSet<>();
-    List<GameRoomModel> gameRoomList = new ArrayList<>();
+    List<RoomModel> gameRoomList = new ArrayList<>();
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
-        logger.debug("GameRoom Connection Established");
+        logger.debug(String.format("%s Room Connection Established", session.getId()));
     }
 
     @Override
     public void handleMessage(WebSocketSession session, WebSocketMessage<?> message) throws Exception {
-        JoinGameModel joinInfo = convertJsonToModel((String) message.getPayload());
+        ConnectedMessageModel connected = convertJsonToModel((String) message.getPayload());
 
-        if (joinInfo != null) {
+        if (connected != null) {
             // 創建新房間
-            if (joinInfo.getMethod().equals("create")) {
-                var response = createRoom(session, joinInfo);
+            if (connected.getMethod().equals("create")) {
+                var response = createRoom(session, connected);
                 TextMessage responseMessage = new TextMessage(convertModelToJsonString(response));
                 session.sendMessage(responseMessage);
             }
 
             // 加入舊房間
-            if (joinInfo.getMethod().equals("join") && !joinInfo.getRoomId().isEmpty()) {
-                var participatorCount = 0;
-                for (var i = 0; i < gameRoomList.size(); i++) {
-                    if (gameRoomList.get(i).getRoomId().equals(joinInfo.getRoomId())) {
-                        List<String> participators = gameRoomList.get(i).getParticipators();
-                        participatorCount = participators.size();
-
-                        //單間房間最多6人
-                        if (participatorCount == 6) {
-                            break;
-                        }
-
-                        PlayerInfoModel playerInfoModel = PlayerInfoModel.builder()
-                                .sessionId(session.getId())
-                                .name(joinInfo.getName())
-                                .roomId(joinInfo.getRoomId())
-                                .build();
-                        playerInfoSet.add(playerInfoModel);
-
-                        participators.add(joinInfo.getName());
-                        GameRoomModel gameRoomModel = gameRoomList.get(i).toBuilder()
-                                .participators(participators)
-                                .build();
-                        gameRoomList.set(i, gameRoomModel);
-                        break;
-                    }
-                }
-
-                GameRoomResponseModel gameRoomResponseModel = GameRoomResponseModel.builder()
-                        .roomId(joinInfo.getRoomId())
-                        .build();
-
-                if (participatorCount == 6) {
-                    gameRoomResponseModel.setContent(String.format("人數已滿，無法加入 %s 房間", joinInfo.getRoomId()));
-                } else {
-                    gameRoomResponseModel.setContent(String.format("成功加入 %s 房間", joinInfo.getRoomId()));
-                }
-                TextMessage responseMessage = new TextMessage(convertModelToJsonString(gameRoomResponseModel));
+            if (connected.getMethod().equals("join") && !connected.getRoomId().isEmpty()) {
+                var response = joinRoom(session, connected);
+                TextMessage responseMessage = new TextMessage(convertModelToJsonString(response));
                 session.sendMessage(responseMessage);
             }
 
             // 離開房間
-            if (joinInfo.getMethod().equals("leave")) {
-                for (var i = 0; i < gameRoomList.size(); i++) {
-                    if (gameRoomList.get(i).getRoomId().equals(joinInfo.getRoomId())) {
-                        List<String> participators = gameRoomList.get(i).getParticipators();
-                        participators.remove(joinInfo.getName());
-
-                        GameRoomModel gameRoomModel = gameRoomList.get(i).toBuilder()
-                                .participators(participators)
-                                .build();
-                        gameRoomList.set(i, gameRoomModel);
-                        break;
-                    }
-                }
-
-                GameRoomResponseModel gameRoomResponseModel = GameRoomResponseModel.builder()
-                        .roomId(joinInfo.getRoomId())
-                        .content(String.format("離開 %s 房間", joinInfo.getRoomId()))
-                        .build();
-                TextMessage responseMessage = new TextMessage(convertModelToJsonString(gameRoomResponseModel));
+            if (connected.getMethod().equals("leave")) {
+                var response = leaveRoom(session, connected);
+                TextMessage responseMessage = new TextMessage(convertModelToJsonString(response));
                 session.sendMessage(responseMessage);
+            }
+
+            // 玩家準備就緒
+            if (connected.getMethod().equals("ready")) {
+                var response = playerReady(session, connected);
+                TextMessage responseMessage = new TextMessage(convertModelToJsonString(response));
+                session.sendMessage(responseMessage);
+                allReadyCheck(connected);
+            }
+
+            // 加牌
+            if (connected.getMethod().equals("hit")) {
+                addCardToHand(session, connected);
             }
         }
     }
 
     @Override
     public void handleTransportError(WebSocketSession session, Throwable exception) throws Exception {
-        logger.error("GameRoom Connection Error :" + exception.getMessage());
+        logger.error(String.format("%s Room Connection Error : %s", session.getId(), exception.getMessage()));
     }
 
     @Override
     public void afterConnectionClosed(WebSocketSession session, CloseStatus closeStatus) throws Exception {
-        logger.error("GameRoom Connection Closed: ", closeStatus.getCode());
+        kickPlayer(session);
+        logger.error(String.format("%s Room Connection Closed: %s", session.getId(), closeStatus.getCode()));
     }
 
     @Override
@@ -126,38 +89,39 @@ public class RoomManagerHandler implements WebSocketHandler {
         return false;
     }
 
-    private GameRoomResponseModel createRoom(WebSocketSession session, JoinGameModel joinInfo) {
-        var roomIdExist = true;
+    private ConnectedMessageResponseModel createRoom(WebSocketSession session, ConnectedMessageModel connected) {
+        var roomIdExist = false;
         var roomId = "";
-        while (roomIdExist) {
+        do {
             var tempRoomId = createRoomId();
             if (!roomIds.contains(tempRoomId)) {
-                roomIdExist = false;
                 roomId = tempRoomId;
-
-                List<String> participators = new ArrayList<>();
-                participators.add(joinInfo.getName());
-
-                GameRoomModel gameRoomModel = GameRoomModel.builder()
-                        .roomId(roomId)
-                        .roomState("create")
-                        .participators(participators)
+                PlayerModel playerModel = PlayerModel.builder()
+                        .sessionId(session.getId())
+                        .name(connected.getName())
+                        .state("Not Ready")
                         .build();
-                gameRoomList.add(gameRoomModel);
-            }
-        }
-        PlayerInfoModel playerInfoModel = PlayerInfoModel.builder()
-                .sessionId(session.getId())
-                .name(joinInfo.getName())
-                .roomId(roomId)
-                .build();
-        playerInfoSet.add(playerInfoModel);
 
-        GameRoomResponseModel gameRoomResponseModel = GameRoomResponseModel.builder()
+                List<PlayerModel> playerModels = new ArrayList<>();
+                playerModels.add(playerModel);
+
+                RoomModel roomModel = RoomModel.builder()
+                        .roomId(roomId)
+                        .roomState("waiting")
+                        .playerList(playerModels)
+                        .build();
+                gameRoomList.add(roomModel);
+                roomIds.add(roomId);
+                break;
+            }
+            roomIdExist = true;
+        } while (roomIdExist);
+
+        ConnectedMessageResponseModel connectedMessageResponseModel = ConnectedMessageResponseModel.builder()
                 .roomId(roomId)
                 .content("創建新房間成功")
                 .build();
-        return gameRoomResponseModel;
+        return connectedMessageResponseModel;
     }
 
     private String createRoomId() {
@@ -171,19 +135,239 @@ public class RoomManagerHandler implements WebSocketHandler {
         return stringBuilder.toString();
     }
 
-    private JoinGameModel convertJsonToModel(String jsonPayload) {
+    private ConnectedMessageResponseModel joinRoom(WebSocketSession session, ConnectedMessageModel connected) {
+        var participatorCount = 0;
+        ConnectedMessageResponseModel connectedMessageResponseModel = ConnectedMessageResponseModel.builder()
+                .roomId(connected.getRoomId())
+                .build();
+
+        for (var i = 0; i < gameRoomList.size(); i++) {
+            if (gameRoomList.get(i).getRoomId().equals(connected.getRoomId())) {
+                List<PlayerModel> playerList = gameRoomList.get(i).getPlayerList();
+                participatorCount = playerList.size();
+
+                //單間房間最多6人
+                if (participatorCount == 6) {
+                    connectedMessageResponseModel.setContent(String.format("人數已滿，無法加入 %s 房間", connected.getRoomId()));
+                    break;
+                }
+
+                // 遊戲進行中
+                if (gameRoomList.get(i).getRoomState().equals("playing")) {
+                    connectedMessageResponseModel.setContent(String.format("遊戲進行中，無法加入 %s 房間", connected.getRoomId()));
+                    break;
+                }
+
+                PlayerModel playerModel = PlayerModel.builder()
+                        .sessionId(session.getId())
+                        .name(connected.getName())
+                        .state("Not Ready")
+                        .build();
+                playerList.add(playerModel);
+
+                RoomModel roomModel = gameRoomList.get(i).toBuilder()
+                        .playerList(playerList)
+                        .build();
+                gameRoomList.set(i, roomModel);
+                connectedMessageResponseModel.setContent(String.format("成功加入 %s 房間", connected.getRoomId()));
+                break;
+            }
+        }
+        return connectedMessageResponseModel;
+    }
+
+    private ConnectedMessageResponseModel leaveRoom(WebSocketSession session, ConnectedMessageModel connected) {
+        for (var i = 0; i < gameRoomList.size(); i++) {
+            if (gameRoomList.get(i).getRoomId().equals(connected.getRoomId())) {
+                List<PlayerModel> participators = gameRoomList.get(i).getPlayerList();
+                var playerInfo = participators.stream().filter(v -> v.getSessionId().equals(session.getId())).findFirst().orElse(null);
+                if (playerInfo != null) {
+                    participators.remove(playerInfo);
+                    if (gameRoomList.get(i).getPlayerList().size() == 0) {
+                        roomIds.remove(gameRoomList.get(i).getRoomId());
+                        gameRoomList.remove(gameRoomList.get(i));
+                    } else {
+                        RoomModel roomModel = gameRoomList.get(i).toBuilder()
+                                .playerList(participators)
+                                .roomState("waiting")
+                                .build();
+                        gameRoomList.set(i, roomModel);
+                    }
+                }
+                break;
+            }
+        }
+        ConnectedMessageResponseModel connectedResponse = ConnectedMessageResponseModel.builder()
+                .roomId(connected.getRoomId())
+                .content(String.format("離開 %s 房間", connected.getRoomId()))
+                .build();
+        return connectedResponse;
+    }
+
+    private void kickPlayer(WebSocketSession session) {
+        for (var i = 0; i < gameRoomList.size(); i++) {
+            for (var player : gameRoomList.get(i).getPlayerList()) {
+                if (player.getSessionId().equals(session.getId())) {
+                    var tempPlayerList = gameRoomList.get(i).getPlayerList();
+                    tempPlayerList.remove(player);
+                    if (gameRoomList.get(i).getPlayerList().size() == 0) {
+                        roomIds.remove(gameRoomList.get(i).getRoomId());
+                        gameRoomList.remove(gameRoomList.get(i));
+                    }
+                    return;
+                }
+            }
+        }
+    }
+
+    private ConnectedMessageResponseModel playerReady(WebSocketSession session, ConnectedMessageModel connected) {
+        for (var room : gameRoomList) {
+            if (room.getRoomId().equals(connected.getRoomId())) {
+                for (var player : room.getPlayerList()) {
+                    if (player.getSessionId().equals(session.getId())) {
+                        player.setState("ready");
+                        ConnectedMessageResponseModel connectedResponse = ConnectedMessageResponseModel.builder()
+                                .roomId(connected.getRoomId())
+                                .content(String.format("%s 玩家已準備就緒", connected.getName()))
+                                .build();
+                        return connectedResponse;
+                    }
+                }
+            }
+        }
+        ConnectedMessageResponseModel connectedResponse = ConnectedMessageResponseModel.builder()
+                .roomId(connected.getRoomId())
+                .content(String.format("sessionId: %s 準備失敗", session.getId()))
+                .build();
+        return connectedResponse;
+    }
+
+    private void allReadyCheck(ConnectedMessageModel connected) {
+        var gameRoom = gameRoomList.stream().filter(v -> v.getRoomId().equals(connected.getRoomId())).findFirst().orElse(null);
+        if (gameRoom != null) {
+            boolean isAllReady = true;
+            for (var player : gameRoom.getPlayerList()) {
+                if (!player.getState().equals("ready")) {
+                    isAllReady = false;
+                }
+            }
+            if (isAllReady) {
+                sendMessage();
+                gameStart(gameRoom);
+            }
+        }
+    }
+
+    private void gameStart(RoomModel room) {
+        List<CardModel> deck = createDeck();
+        Collections.shuffle(deck);
+        room.setDeck(deck);
+
+
+        // 發第一張牌
+        for (PlayerModel player : room.getPlayerList()) {
+            List<CardModel> hand = new ArrayList<>();
+            CardModel card = room.getDeck().remove(0);
+            hand.add(card);
+            player.setHand(hand);
+            player.setPoint(calculateHandPoints(player.getHand()));
+        }
+
+        // 發第二張牌
+        for (PlayerModel player : room.getPlayerList()) {
+            CardModel card = room.getDeck().remove(0);
+            List<CardModel> playerHand = player.getHand();
+            playerHand.add(card);
+            player.setHand(playerHand);
+            player.setPoint(calculateHandPoints(player.getHand()));
+            if (player.getPoint() == 21) {
+                // stop
+            }
+        }
+    }
+
+    private void addCardToHand(WebSocketSession session, ConnectedMessageModel connected) {
+        var room = gameRoomList.stream().filter(v -> v.getRoomId().equals(connected.getRoomId())).findFirst().orElse(null);
+        for (var player : room.getPlayerList()) {
+            if (player.getSessionId().equals(session.getId())) {
+                CardModel card = room.getDeck().remove(0);
+                List<CardModel> playerHand = player.getHand();
+                playerHand.add(card);
+                player.setHand(playerHand);
+                player.setPoint(calculateHandPoints(player.getHand()));
+                if (player.getPoint() == 21) {
+                    // stop
+                } else if (player.getPoint() > 21) {
+                    // bust
+                }
+            }
+        }
+    }
+
+    private List<CardModel> createDeck() {
+        List<CardModel> deck = new ArrayList<>();
+        String[] suits = {"Spades", "Hearts", "Diamonds", "Clubs"};
+        String[] ranks = {"2", "3", "4", "5", "6", "7", "8", "9", "10", "J", "Q", "K", "A"};
+        for (String suit : suits) {
+            for (String rank : ranks) {
+                CardModel card = new CardModel(suit, rank);
+                deck.add(card);
+            }
+        }
+        return deck;
+    }
+
+    private Integer calculateHandPoints(List<CardModel> hand) {
+        int totalPoints = 0;
+        int numOfAce = 0;
+
+        for (var card : hand) {
+            if (card.getRank().equals("A")) {
+                totalPoints += 1;
+                numOfAce++;
+            } else if (card.getRank().equals("J") || card.getRank().equals("Q") || card.getRank().equals("K")) {
+                totalPoints += 10;
+            } else {
+                totalPoints += Integer.parseInt(card.getRank());
+            }
+        }
+
+        // 处理A牌的点数
+        for (int i = 0; i < numOfAce; i++) {
+            if (totalPoints <= 11) {
+                totalPoints += 10;
+            }
+        }
+
+        return totalPoints;
+    }
+
+    private ConnectedMessageModel convertJsonToModel(String jsonPayload) {
         ObjectMapper objectMapper = new ObjectMapper();
         try {
-            return objectMapper.readValue(jsonPayload, JoinGameModel.class);
+            return objectMapper.readValue(jsonPayload, ConnectedMessageModel.class);
         } catch (IOException exc) {
             logger.error("convertJsonToModel Error" + exc.getMessage(), exc);
             return null;
         }
     }
 
-    private String convertModelToJsonString(GameRoomResponseModel gameRoomResponseModel) throws JsonProcessingException {
+    private String convertModelToJsonString(ConnectedMessageResponseModel connectedMessageResponseModel) throws JsonProcessingException {
         ObjectMapper objectMapper = new ObjectMapper();
-        String jsonString = objectMapper.writeValueAsString(gameRoomResponseModel);
+        String jsonString = objectMapper.writeValueAsString(connectedMessageResponseModel);
         return jsonString;
+    }
+
+    public HashSet<String> getRoomIds() {
+        return roomIds;
+    }
+
+    public List<RoomModel> getGameRoomList() {
+        return gameRoomList;
+    }
+
+    public void sendMessage() {
+        // 发送消息到 "/topic/example" 目的地
+        messagingTemplate.convertAndSend("/websocket-endpoint", "Hello, World!");
     }
 }

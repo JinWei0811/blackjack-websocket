@@ -5,12 +5,11 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+@Builder
 @Data
-@Builder(toBuilder = true)
-@AllArgsConstructor
 @NoArgsConstructor
-public class JoinGameModel {
-    private String name;
-    private String method;
+@AllArgsConstructor
+public class ConnectedMessageResponseModel {
     private String roomId;
+    private String content;
 }
