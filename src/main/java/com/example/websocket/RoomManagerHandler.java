@@ -9,6 +9,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.stereotype.Service;
 import org.springframework.web.socket.*;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 
@@ -22,8 +23,6 @@ public class RoomManagerHandler implements WebSocketHandler {
     private static Logger logger = LoggerFactory.getLogger(RoomManagerHandler.class);
     private static final String ALLOWED_CHARACTERS = "abcdefghijkmnpqrstuvwxyzABCDEFGHIJKLMNPQRSTUVWXYZ123456789";
     private static final int ROOM_ID_LENGTH = 6;
-    @Autowired
-    private SimpMessagingTemplate messagingTemplate;
     HashSet<String> roomIds = new HashSet<>();
     List<RoomModel> gameRoomList = new ArrayList<>();
 
@@ -70,6 +69,12 @@ public class RoomManagerHandler implements WebSocketHandler {
             if (connected.getMethod().equals("hit")) {
                 addCardToHand(session, connected);
             }
+
+            // 不加牌
+            if(connected.getMethod().equals("skip")){
+                skipCardToHand(session, connected);
+            }
+
         }
     }
 
@@ -100,6 +105,7 @@ public class RoomManagerHandler implements WebSocketHandler {
                         .sessionId(session.getId())
                         .name(connected.getName())
                         .state("Not Ready")
+                        .session(session)
                         .build();
 
                 List<PlayerModel> playerModels = new ArrayList<>();
@@ -162,6 +168,7 @@ public class RoomManagerHandler implements WebSocketHandler {
                         .sessionId(session.getId())
                         .name(connected.getName())
                         .state("Not Ready")
+                        .session(session)
                         .build();
                 playerList.add(playerModel);
 
@@ -242,7 +249,7 @@ public class RoomManagerHandler implements WebSocketHandler {
         return connectedResponse;
     }
 
-    private void allReadyCheck(ConnectedMessageModel connected) {
+    private void allReadyCheck(ConnectedMessageModel connected) throws IOException {
         var gameRoom = gameRoomList.stream().filter(v -> v.getRoomId().equals(connected.getRoomId())).findFirst().orElse(null);
         if (gameRoom != null) {
             boolean isAllReady = true;
@@ -252,13 +259,15 @@ public class RoomManagerHandler implements WebSocketHandler {
                 }
             }
             if (isAllReady) {
-                sendMessage();
+                for (var player : gameRoom.getPlayerList()) {
+                    player.getSession().sendMessage(new TextMessage("遊戲開始"));
+                }
                 gameStart(gameRoom);
             }
         }
     }
 
-    private void gameStart(RoomModel room) {
+    private void gameStart(RoomModel room) throws IOException {
         List<CardModel> deck = createDeck();
         Collections.shuffle(deck);
         room.setDeck(deck);
@@ -271,6 +280,7 @@ public class RoomManagerHandler implements WebSocketHandler {
             hand.add(card);
             player.setHand(hand);
             player.setPoint(calculateHandPoints(player.getHand()));
+            player.getSession().sendMessage(new TextMessage(convertModelToJsonString(card)));
         }
 
         // 發第二張牌
@@ -280,13 +290,14 @@ public class RoomManagerHandler implements WebSocketHandler {
             playerHand.add(card);
             player.setHand(playerHand);
             player.setPoint(calculateHandPoints(player.getHand()));
+            player.getSession().sendMessage(new TextMessage(convertModelToJsonString(card)));
             if (player.getPoint() == 21) {
-                // stop
+                player.getSession().sendMessage(new TextMessage("恭喜！獲得21點。"));
             }
         }
     }
 
-    private void addCardToHand(WebSocketSession session, ConnectedMessageModel connected) {
+    private void addCardToHand(WebSocketSession session, ConnectedMessageModel connected) throws IOException {
         var room = gameRoomList.stream().filter(v -> v.getRoomId().equals(connected.getRoomId())).findFirst().orElse(null);
         for (var player : room.getPlayerList()) {
             if (player.getSessionId().equals(session.getId())) {
@@ -295,11 +306,23 @@ public class RoomManagerHandler implements WebSocketHandler {
                 playerHand.add(card);
                 player.setHand(playerHand);
                 player.setPoint(calculateHandPoints(player.getHand()));
+                player.getSession().sendMessage(new TextMessage(convertModelToJsonString(card)));
                 if (player.getPoint() == 21) {
                     // stop
+                    player.getSession().sendMessage(new TextMessage("恭喜！剛好21點"));
                 } else if (player.getPoint() > 21) {
                     // bust
+                    player.getSession().sendMessage(new TextMessage("不好意思，你輸了"));
                 }
+            }
+        }
+    }
+
+    private void skipCardToHand(WebSocketSession session, ConnectedMessageModel connected){
+        var room = gameRoomList.stream().filter(v -> v.getRoomId().equals(connected.getRoomId())).findFirst().orElse(null);
+        for(var player: room.getPlayerList()){
+            if(player.getSessionId().equals(session.getId())){
+                player.setState("stay");
             }
         }
     }
@@ -332,7 +355,7 @@ public class RoomManagerHandler implements WebSocketHandler {
             }
         }
 
-        // 处理A牌的点数
+        // 處理A的點數
         for (int i = 0; i < numOfAce; i++) {
             if (totalPoints <= 11) {
                 totalPoints += 10;
@@ -352,9 +375,9 @@ public class RoomManagerHandler implements WebSocketHandler {
         }
     }
 
-    private String convertModelToJsonString(ConnectedMessageResponseModel connectedMessageResponseModel) throws JsonProcessingException {
+    private <T> String convertModelToJsonString(T inputModel) throws JsonProcessingException {
         ObjectMapper objectMapper = new ObjectMapper();
-        String jsonString = objectMapper.writeValueAsString(connectedMessageResponseModel);
+        String jsonString = objectMapper.writeValueAsString(inputModel);
         return jsonString;
     }
 
@@ -364,10 +387,5 @@ public class RoomManagerHandler implements WebSocketHandler {
 
     public List<RoomModel> getGameRoomList() {
         return gameRoomList;
-    }
-
-    public void sendMessage() {
-        // 发送消息到 "/topic/example" 目的地
-        messagingTemplate.convertAndSend("/websocket-endpoint", "Hello, World!");
     }
 }

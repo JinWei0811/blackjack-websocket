@@ -6,10 +6,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.web.socket.CloseStatus;
-import org.springframework.web.socket.WebSocketHandler;
-import org.springframework.web.socket.WebSocketMessage;
-import org.springframework.web.socket.WebSocketSession;
+import org.springframework.messaging.simp.SimpMessagingTemplate;
+import org.springframework.web.socket.*;
 import org.springframework.web.socket.config.annotation.EnableWebSocket;
 
 import java.util.ArrayList;
@@ -27,6 +25,7 @@ public class QueryHandler implements WebSocketHandler {
     public QueryHandler(RoomManagerHandler roomManagerHandler) {
         this.roomManagerHandler = roomManagerHandler;
     }
+
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
@@ -53,4 +52,5 @@ public class QueryHandler implements WebSocketHandler {
     public boolean supportsPartialMessages() {
         return false;
     }
+
 }

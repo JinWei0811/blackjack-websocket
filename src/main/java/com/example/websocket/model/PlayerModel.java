@@ -4,6 +4,7 @@ import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
+import org.springframework.web.socket.WebSocketSession;
 
 import java.math.BigDecimal;
 import java.util.List;
@@ -15,6 +16,7 @@ import java.util.List;
 public class PlayerModel {
     private String sessionId;
     private String name;
+    private WebSocketSession session;
     /**
      * Ready
      * Not Ready
@@ -24,7 +26,6 @@ public class PlayerModel {
      * Leave
      */
     private String state;
-
     private BigDecimal chip;
     private List<CardModel> hand;
     private Integer point;
