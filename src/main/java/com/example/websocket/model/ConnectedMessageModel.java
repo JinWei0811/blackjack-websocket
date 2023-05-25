@@ -13,4 +13,5 @@ public class ConnectedMessageModel {
     private String name;
     private String method;
     private String roomId;
+    private String sessionId;
 }

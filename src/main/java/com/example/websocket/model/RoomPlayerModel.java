@@ -11,7 +11,7 @@ import java.util.List;
 @Builder(toBuilder = true)
 @NoArgsConstructor
 @AllArgsConstructor
-public class GameModel {
-    private String roomId;
-    private List<PlayerModel> playerList;
+public class RoomPlayerModel {
+    List<String> names;
+    List<Integer> chips;
 }

@@ -1,16 +1,21 @@
 package com.example.websocket.model;
 
-
 import lombok.AllArgsConstructor;
 import lombok.Builder;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.List;
+
 @Data
 @Builder(toBuilder = true)
-@AllArgsConstructor
 @NoArgsConstructor
-public class GameMessageModel {
+@AllArgsConstructor
+public class PlayerCardModel {
     private String method;
-    private String roomId;
+    private String name;
+    private List<String> suits;
+    private List<String> ranks;
+    private String state;
+    private Integer points;
 }

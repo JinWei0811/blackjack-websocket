@@ -9,7 +9,8 @@ import lombok.NoArgsConstructor;
 @Builder(toBuilder = true)
 @AllArgsConstructor
 @NoArgsConstructor
-public class GameMessageResponseModel {
+public class GameResultModel {
     private String roomId;
-    private String content;
+    private String name;
+    private String result;
 }

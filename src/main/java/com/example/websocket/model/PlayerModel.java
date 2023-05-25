@@ -18,15 +18,17 @@ public class PlayerModel {
     private String name;
     private WebSocketSession session;
     /**
-     * Ready
-     * Not Ready
-     * Waiting
-     * Playing
-     * Finished
-     * Leave
+     * ready
+     * not ready
+     * waiting
+     * playing
+     * stay
+     * bust
+     * finished
+     * leave
      */
     private String state;
-    private BigDecimal chip;
+    private Integer chip;
     private List<CardModel> hand;
     private Integer point;
 }
