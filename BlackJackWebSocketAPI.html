@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <title>BlackJack WebSocket API</title>
+        <style>
+/* From extension vscode.github */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.vscode-dark img[src$=\#gh-light-mode-only],
+.vscode-light img[src$=\#gh-dark-mode-only] {
+	display: none;
+}
+
+</style>
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex/dist/katex.min.css">
+<link href="https://cdn.jsdelivr.net/npm/katex-copytex@latest/dist/katex-copytex.min.css" rel="stylesheet" type="text/css">
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/markdown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/highlight.css">
+<style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+        </style>
+        <style>
+.task-list-item {
+    list-style-type: none;
+}
+
+.task-list-item-checkbox {
+    margin-left: -20px;
+    vertical-align: middle;
+    pointer-events: none;
+}
+</style>
+        
+    </head>
+    <body class="vscode-body vscode-light">
+        <h1 id="blackjack-websocket-api">BlackJack WebSocket API</h1>
+<p>內容傳遞/接收皆為 .json 檔案</p>
+<h2 id="連接-websocket">連接 WebSocket</h2>
+<p>在建立 WebSocket 連線之前，請使用以下程式碼進行連線：</p>
+<p><code>const socket = webSocket('ws://localhost:8080/connect'); </code></p>
+<h2 id="訂閱-websocket">訂閱 WebSocket</h2>
+<p>設定好 WebSocket 連線內容後，利用以下程式碼進行消息監聽：</p>
+<pre><code>    this.socket$.subscribe(
+      message =&gt; { console.log('接收到消息:', message); },
+      error   =&gt; { console.error('WebSocket錯誤:', error); },
+      ()      =&gt; { console.log('WebSocket連接關閉'); }
+    );
+</code></pre>
+<h2 id="事件和訊息">事件和訊息</h2>
+<p>在建立連線後，運用以下程式碼進行訊息傳遞</p>
+<p><code>this.socket$.next({ name: '1', method: 'create' });</code></p>
+<h1 id="訊息格式">訊息格式</h1>
+<h2 id="建立房間">建立房間</h2>
+<ul>
+<li>輸入
+<ul>
+<li>name (string)：使用者名稱</li>
+<li>method (string)：create</li>
+</ul>
+</li>
+<li>範例<pre><code>  const createRoomMessage = {
+    name: 'simon',
+    method: 'create'};
+    socket.next(createRoomMessage);
+</code></pre>
+</li>
+<li>輸出
+<ul>
+<li>roomId(string)：房間 ID</li>
+<li>playerList(string[])：參與者名單</li>
+<li>playerStateList(string[])：參與者狀態</li>
+<li>content(string)：成功訊息</li>
+</ul>
+</li>
+<li>範例<pre><code>const createRoomResponse = {
+  roomId: 'g1Y73I',
+  playerList: ['simon', 'bot' ],
+  playerStateList: ['not ready', 'ready],
+  content: '成功建立新房間'};
+</code></pre>
+</li>
+</ul>
+<h2 id="加入房間">加入房間</h2>
+<ul>
+<li>輸入
+<ul>
+<li>name(string)：使用者名稱</li>
+<li>method(string)：join</li>
+<li>roomId(string)：房間 ID</li>
+</ul>
+</li>
+<li>範例<pre><code>  const joinRoomMessage = {
+    name: 'aaron',
+    method: 'join',
+    roomId: 'g1Y73I'};
+    socket.next(joinRoomMessage);
+</code></pre>
+</li>
+<li>輸出
+<ul>
+<li>roomId(string)：房間 ID</li>
+<li>playerList(string[])：參與者名單</li>
+<li>playerStateList(string[])：參與者狀態</li>
+<li>content(string)：成功訊息</li>
+</ul>
+</li>
+<li>範例<pre><code>const joinRoomResponse = {
+  roomId: 'g1Y73I',
+  playerList: ['simon', 'bot', 'aaron'],
+  playerStateList: ['not ready', 'ready, 'not ready'],
+  content: 'aaron 成功加入房間'};
+</code></pre>
+</li>
+</ul>
+<h2 id="離開房間">離開房間</h2>
+<ul>
+<li>輸入
+<ul>
+<li>name(string)：使用者名稱</li>
+<li>method(string)：leave</li>
+<li>roomId(string)：房間 ID</li>
+</ul>
+</li>
+<li>範例<pre><code>  const leaveRoomMessage = {
+    name: 'simon',
+    method: 'leave',
+    roomId: 'g1Y73I'};
+    socket.next(leaveRoomMessage);
+</code></pre>
+</li>
+<li>輸出
+<ul>
+<li>roomId(string)：房間 ID</li>
+<li>playerList(string[])：參與者名單</li>
+<li>playerStateList(string[])：參與者狀態</li>
+<li>content(string)：成功訊息</li>
+</ul>
+</li>
+<li>範例<pre><code>const leaveRoomResponse = {
+  roomId: 'g1Y73I',
+  playerList: ['simon', 'bot'],
+  playerStateList: ['not ready', 'ready],
+  content: 'aaron 離開房間'};
+</code></pre>
+</li>
+</ul>
+<h2 id="玩家準備就緒">玩家準備就緒</h2>
+<ul>
+<li>輸入
+<ul>
+<li>name(string)：使用者名稱</li>
+<li>method(string)：ready</li>
+<li>roomId(string)：房間 ID</li>
+</ul>
+</li>
+<li>範例<pre><code>  const playerReadyMessage = {
+    name: 'aaron',
+    method: 'ready',
+    roomId: 'g1Y73I'};
+    socket.next(playerReadyMessage);
+</code></pre>
+</li>
+<li>輸出
+<ul>
+<li>roomId(string)：房間 ID</li>
+<li>playerList(string[])：參與者名單</li>
+<li>playerStateList(string[])：參與者狀態</li>
+<li>content(string)：成功訊息</li>
+</ul>
+</li>
+<li>範例<pre><code>const playerReadyResponse = {
+  roomId: 'g1Y73I',
+  playerList: ['simon', 'bot', 'aaron'],
+  playerStateList: ['not ready', 'ready', 'ready'],
+  content: 'aaron 玩家已準備就緒'};
+</code></pre>
+</li>
+</ul>
+<h2 id="玩家取消準備">玩家取消準備</h2>
+<ul>
+<li>輸入
+<ul>
+<li>name(string)：使用者名稱</li>
+<li>method(string)：not ready</li>
+<li>roomId(string)：房間 ID</li>
+</ul>
+</li>
+<li>範例<pre><code>  const playerNotReadyMessage = {
+    name: 'aaron',
+    method: 'not ready',
+    roomId: 'g1Y73I'};
+    socket.next(playerNotReadyMessage);
+</code></pre>
+</li>
+<li>輸出
+<ul>
+<li>roomId(string)：房間 ID</li>
+<li>playerList(string[])：參與者名單</li>
+<li>playerStateList(string[])：參與者狀態</li>
+<li>content(string)：成功訊息</li>
+</ul>
+</li>
+<li>範例<pre><code>const playerNotReadyResponse = {
+  roomId: 'g1Y73I',
+  playerList: ['simon', 'bot', 'aaron'],
+  playerStateList: ['not ready', 'ready', 'not ready'],
+  content: 'aaron 玩家取消準備'};
+</code></pre>
+</li>
+</ul>
+<h2 id="開始遊戲">開始遊戲</h2>
+<p>當所有玩家準備過五秒後會開始遊戲(五秒內有人取消準備，則不開始)。</p>
+<ul>
+<li>輸入：無</li>
+<li>輸出
+<ul>
+<li>roomId(string)：房間 ID</li>
+<li>playerList(string[])：參與者名單</li>
+<li>playerStateList(string[])：參與者狀態</li>
+<li>content(string)：成功訊息</li>
+</ul>
+</li>
+<li>範例<pre><code>const gameStartResponse = {
+  roomId: 'g1Y73I',
+  playerList: ['simon', 'bot'],
+  playerStateList: ['continue', 'continue'],
+  content: '遊戲開始'};
+</code></pre>
+</li>
+</ul>
+<h2 id="發牌總共會有兩次">發牌(總共會有兩次)</h2>
+<p>遊戲開始後，直接完成兩次發牌(每個人兩張)。</p>
+<p>撲克牌花色：Spades(黑陶), Hearts(紅心), Diamonds(方塊), Clubs(梅花)
+撲克牌數字：'2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'</p>
+<ul>
+<li>輸入：無</li>
+<li>輸出
+<ul>
+<li>name(string)：玩家名稱</li>
+<li>suits(string[])：花色列表</li>
+<li>ranks(string[])：數字列表</li>
+<li>state(string)：狀態</li>
+<li>points(int)：點數總和</li>
+</ul>
+</li>
+<li>範例<pre><code>const getCardResponse={
+  name: 'simon',
+  suits: ['Diamonds'],
+  ranks: ['7'],
+  state: 'continue',
+  points: 7  }
+</code></pre>
+</li>
+</ul>
+<h2 id="加牌hit">加牌(Hit)</h2>
+<p>如果加牌後點數超過21點，則輸出 state 為 bust。</p>
+<ul>
+<li>輸入
+<ul>
+<li>name(string)：使用者名稱</li>
+<li>method(string)：hit</li>
+<li>roomId(string)：房間 ID</li>
+</ul>
+</li>
+<li>範例<pre><code>  const playerHitMessage = {
+    name: 'simon',
+    method: 'hit',
+    roomId: 'g1Y73I'};
+    socket.next(playerHitMessage);
+</code></pre>
+</li>
+<li>輸出
+<ul>
+<li>name(string)：玩家名稱</li>
+<li>suits(string[])：花色列表</li>
+<li>ranks(string[])：數字列表</li>
+<li>state(string)：狀態</li>
+<li>points(int)：點數總和</li>
+</ul>
+</li>
+<li>範例<pre><code>const playerHitResponse={
+  name: 'simon',
+  suits: ['Diamonds', 'Clubs', 'Diamonds'],
+  ranks: ['7', '4', '9'],
+  state: 'continue',
+  points: 20  }
+</code></pre>
+</li>
+</ul>
+<h2 id="不加牌">不加牌</h2>
+<ul>
+<li>輸入</li>
+<li>name(string)：使用者名稱</li>
+<li>method(string)：skip</li>
+<li>roomId(string)：房間 ID</li>
+<li>範例<pre><code>  const playerSkipMessage = {
+    name: 'simon',
+    method: 'skip',
+    roomId: 'g1Y73I'};
+    socket.next(playerSkipMessage);
+</code></pre>
+</li>
+<li>輸出
+<ul>
+<li>name(string)：玩家名稱</li>
+<li>suits(string[])：花色列表</li>
+<li>ranks(string[])：數字列表</li>
+<li>state(string)：狀態</li>
+<li>points(int)：點數總和</li>
+</ul>
+</li>
+<li>範例<pre><code>const playerSkipResponse={
+  name: 'simon',
+  suits: ['Diamonds', 'Clubs', 'Diamonds'],
+  ranks: ['7', '4', '9'],
+  state: 'skip',
+  points: 20  }
+</code></pre>
+</li>
+</ul>
+<h2 id="電腦加牌">電腦加牌</h2>
+<p>當所有玩家的狀態都為 skip 時，則電腦開始計算是否加牌。</p>
+<p>BOT可能狀態： 繼續加牌/continue 停止加牌/skip 爆牌/bust</p>
+<ul>
+<li>輸入 無</li>
+<li>輸出
+<ul>
+<li>name(string)：玩家名稱</li>
+<li>suits(string[])：花色列表</li>
+<li>ranks(string[])：數字列表</li>
+<li>state(string)：狀態</li>
+<li>points(int)：點數總和</li>
+</ul>
+</li>
+<li>範例<pre><code>const playerSkipResponse={
+  name: 'bot',
+  suits: ['Spades', 'Hearts', 'Spades'],
+  ranks: ['8', '4', '9'],
+  state: 'skip',
+  points: 21  }
+</code></pre>
+</li>
+</ul>
+<h2 id="輸贏結果">輸贏結果</h2>
+<p>當電腦加牌結束，則輸出結果</p>
+<p>result： 贏/win 輸/lose</p>
+<ul>
+<li>輸入 無</li>
+<li>輸出
+<ul>
+<li>roomId(string)：房間 ID</li>
+<li>name(string[])：玩家名稱</li>
+<li>result(string[])：結果</li>
+</ul>
+</li>
+<li>範例<pre><code>const gameResultResponse={
+  roomId: 'g1Y73I',
+  name: 'simon',
+  result: 'lose' }
+</code></pre>
+</li>
+</ul>
+<h2 id="回傳最終結果">回傳最終結果</h2>
+<ul>
+<li>輸入 無</li>
+<li>輸出
+<ul>
+<li>names(string[])：參與者列表</li>
+<li>chips(int[])：代幣列表</li>
+</ul>
+</li>
+<li>範例<pre><code>const countResultResponse={
+  name: ['simon','bot'],
+  chips: [900,1100 ] }
+</code></pre>
+</li>
+</ul>
+
+        <script async src="https://cdn.jsdelivr.net/npm/katex-copytex@latest/dist/katex-copytex.min.js"></script>
+        
+    </body>
+    </html>
