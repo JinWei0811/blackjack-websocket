@@ -37,6 +37,7 @@ public class RoomManagerHandler implements WebSocketHandler {
     private static final String READY = "ready";
     private static final String NOT_READY = "not ready";
     private static final String CONTINUE = "continue";
+    private static final String DELIVERY = "delivery";
     private static final String HIT = "hit";
     private static final String SKIP = "skip";
     private static final String BUST = "bust";
@@ -364,7 +365,7 @@ public class RoomManagerHandler implements WebSocketHandler {
             if (gameRoom != null) {
                 boolean isAllReadyFirstCheck = gameRoom.getPlayerList().stream().filter(v -> v.getState().equals(NOT_READY)).findFirst().orElse(null) == null ? true : false;
                 try {
-                    Thread.sleep(5000);
+                    Thread.sleep(1000);
                 } catch (InterruptedException e) {
                     throw new RuntimeException(e);
                 }
@@ -427,7 +428,7 @@ public class RoomManagerHandler implements WebSocketHandler {
     private void addCardToHand(WebSocketSession session, ConnectedMessageModel connected) throws IOException {
         var room = gameRoomList.stream().filter(v -> v.getRoomId().equals(connected.getRoomId())).findFirst().orElse(null);
         for (var player : room.getPlayerList()) {
-            if (player.getSessionId().equals(session.getId())) {
+            if (player.getName().equals(connected.getName())) {
                 CardModel card = room.getDeck().remove(0);
                 List<CardModel> playerHand = player.getHand();
                 playerHand.add(card);
@@ -441,7 +442,7 @@ public class RoomManagerHandler implements WebSocketHandler {
     private void skipCardToHand(WebSocketSession session, ConnectedMessageModel connected) throws IOException {
         var room = gameRoomList.stream().filter(v -> v.getRoomId().equals(connected.getRoomId())).findFirst().orElse(null);
         for (var player : room.getPlayerList()) {
-            if (player.getSessionId().equals(session.getId())) {
+            if (player.getName().equals(connected.getName())) {
                 player.setState(SKIP);
                 brodcastToPlayers(convertModelToJsonString(getPlayerCard(player, SKIP)), room.getPlayerList());
             }
@@ -475,6 +476,8 @@ public class RoomManagerHandler implements WebSocketHandler {
 
                 if (botPlayer.getState().equals(CONTINUE) && botPlayer.getPoint() > 16) {
                     botPlayer.setState(SKIP);
+                    brodcastToPlayers(convertModelToJsonString(getPlayerCard(botPlayer, SKIP)), playerList);
+//                    brodcastToPlayers(convertModelToJsonString(gameResult), playerList);
                 }
 
                 if (botPlayer.getState().equals(SKIP)) {
@@ -531,14 +534,14 @@ public class RoomManagerHandler implements WebSocketHandler {
         if (player.getPoint() == 21) {
             state = SKIP;
             if (!player.getSessionId().equals("bot")) {
-                player.getSession().sendMessage(new TextMessage("恭喜！獲得21點"));
+//                player.getSession().sendMessage(new TextMessage("恭喜！獲得21點"));
                 allStayCheck(roomId);
             }
             brodcastToPlayers(convertModelToJsonString(getPlayerCard(player, state)), playerList);
         } else if (player.getPoint() > 21) {
             state = BUST;
             if (!player.getSessionId().equals("bot")) {
-                player.getSession().sendMessage(new TextMessage("不好意思，你輸了"));
+//                player.getSession().sendMessage(new TextMessage("不好意思，你輸了"));
                 allStayCheck(roomId);
             }
             brodcastToPlayers(convertModelToJsonString(getPlayerCard(player, state)), playerList);
